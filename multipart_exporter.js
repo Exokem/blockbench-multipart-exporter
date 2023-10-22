@@ -2,9 +2,59 @@
 (
     function()
     {
-        var button;
+        function removeAllCubesFromExport()
+        {
+            Cube.all.forEach((cube, i, array) => { cube.export = false });
+        }
 
-        Plugin.register('blockbench-multipart', 
+        function selectOutput()
+        {
+            return Blockbench.pickDirectory(
+            {
+                title: "Select Output Directory"
+            });
+        }
+
+        function getAllCubesInGroup(group)
+        {
+            const cubes = new Set();
+
+            var queue = [];
+            queue.push(group);
+
+            while (queue.length != 0)
+            {
+                const current = queue.shift();
+
+                if (current instanceof Group)
+                {
+                    current.forEachChild((node) => 
+                    {
+                        // Assign nodes the name of their containing group.
+                        node.bbmp_groupName = current.name;
+                        queue.push(node);
+                    });
+                }
+
+                else if (current instanceof Cube)
+                {
+                    cubes.add(current);
+                }
+            }
+
+            return cubes;
+        }
+
+        function exportModel(path)
+        {
+            const model = Codecs['java_block'].compile();
+
+            Blockbench.writeFile(path, {
+                content: model
+            });
+        }
+
+        Plugin.register('multipart_exporter', 
         {
             title: 'Multipart Exporter',
             author: 'xokem',
@@ -13,21 +63,35 @@
             variant: 'both',
             onload() 
             {
-                button = new Action('export-multipart', 
+                new Action('export-group',
+                {
+                    name: 'Export Group',
+                    description: 'Exports the selected group as one model.',
+                    click: function()
+                    {
+                        removeAllCubesFromExport();
+
+                        const group = Group.selected;
+                        const cubes = getAllCubesInGroup(group);
+
+                        cubes.forEach((cube, i, array) => { cube.export = true; });
+
+                        const path = `${selectOutput()}\\${group.name}.json`;
+                        exportModel(path);
+
+                        Blockbench.showMessageBox({ message: `Exported ${path}` });
+                    }
+                });
+
+                new Action('export-multipart', 
                 {
                     name: 'Export Multipart',
                     description: 'Exports each selected shape to an individual model file.',
                     click: function()
                     {
-                        Cube.all.forEach((cube, i, array) => 
-                        {
-                            cube.export = false;
-                        });
+                        removeAllCubesFromExport();
 
-                        const outputDir = Blockbench.pickDirectory(
-                        {
-                            title: "Select Output Directory"
-                        });
+                        const outputDir = selectOutput();
 
                         var queue = [];
                         Group.all.forEach((group, i, array) => queue.push(group));
@@ -61,11 +125,7 @@
                         
                             const path = `${outputDir}\\${cube.bbmp_groupName}_${cube.name}.json`;
 
-                            const model = Codecs['java_block'].compile();
-
-                            Blockbench.writeFile(path, {
-                                content: model
-                            });
+                            exportModel(path);
                             
                             cube.export = false;
 
@@ -79,8 +139,5 @@
                 });
             }
         });
-
-        
     }
-
 )();
